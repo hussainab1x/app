@@ -12,7 +12,6 @@ st.set_page_config(page_title="Metal Mechanical Property Predictor", layout="wid
 BASE_DIR = Path(".")
 PRESSURE_COL_NAME = "applied_pressure_GPa"
 
-
 COMPOSITION_FEATURES = [
     "wtpct_H", "wtpct_He", "wtpct_Li", "wtpct_Be", "wtpct_B", "wtpct_C", "wtpct_N", "wtpct_O", "wtpct_F", "wtpct_Ne",
     "wtpct_Na", "wtpct_Mg", "wtpct_Al", "wtpct_Si", "wtpct_P", "wtpct_S", "wtpct_Cl", "wtpct_Ar", "wtpct_K", "wtpct_Ca",
@@ -28,7 +27,7 @@ COMPOSITION_FEATURES = [
     "wtpct_Rg", "wtpct_Cn", "wtpct_Nh", "wtpct_Fl", "wtpct_Mc", "wtpct_Lv", "wtpct_Ts", "wtpct_Og"
 ]
 
-NUMERIC_FEATURES = ["density", "n_elements_present"]
+NUMERIC_FEATURES = ["density"]
 CATEGORICAL_FEATURES = ["base_metal"]
 FEATURE_COLS = NUMERIC_FEATURES + COMPOSITION_FEATURES + CATEGORICAL_FEATURES
 ELEMENT_OPTIONS = [c.replace("wtpct_", "") for c in COMPOSITION_FEATURES]
@@ -93,8 +92,6 @@ def align_input_df(input_df: pd.DataFrame, feature_cols):
                 df[col] = 0.0
             elif col == "density":
                 df[col] = np.nan
-            elif col == "n_elements_present":
-                df[col] = np.nan
             elif col == "base_metal":
                 df[col] = np.nan
             else:
@@ -150,8 +147,6 @@ def build_sample_template(feature_cols, categorical_features, default_pressure):
             template[col] = 0.0
         elif col == "density":
             template[col] = 7.8
-        elif col == "n_elements_present":
-            template[col] = 1
         elif col in categorical_features:
             template[col] = ""
         else:
@@ -210,13 +205,6 @@ def validate_single_input_row(row_dict, composition_features):
     if len(selected_nonzero) == 0:
         errors.append("Please enter at least one element percentage.")
 
-    if "n_elements_present" in row_dict:
-        try:
-            if int(row_dict["n_elements_present"]) < 1:
-                errors.append("Number of elements present must be at least 1.")
-        except Exception:
-            errors.append("Number of elements present must be valid.")
-
     return total_wt, status_type, status_text, messages, errors
 
 
@@ -232,8 +220,6 @@ def validate_uploaded_csv(df, feature_cols, composition_features, default_pressu
         if col.startswith("wtpct_"):
             out[col] = 0.0
         elif col == "density":
-            out[col] = np.nan
-        elif col == "n_elements_present":
             out[col] = np.nan
         elif col == "base_metal":
             out[col] = np.nan
@@ -287,7 +273,7 @@ st.markdown(
     unsafe_allow_html=True
 )
 
-
+st.info("Running in standalone mode. No large reference CSV is required.")
 
 st.markdown(
     """
@@ -367,7 +353,6 @@ with st.sidebar:
 
 
 def single_material_input(
-    numeric_features,
     categorical_features,
     feature_cols,
     composition_features,
@@ -387,19 +372,7 @@ def single_material_input(
         with col_a:
             st.markdown("### Basic material information")
             st.caption("Base metal is assigned automatically from the highest element percentage.")
-
             density = st.number_input("Density", min_value=0.0, value=7.8, step=0.01)
-
-            if "n_elements_present" in numeric_features:
-                n_elements_present = st.number_input(
-                    "Number of elements present",
-                    min_value=1,
-                    value=2,
-                    step=1
-                )
-            else:
-                n_elements_present = None
-
             applied_pressure = st.number_input(
                 "Applied pressure (GPa)",
                 min_value=0.0,
@@ -457,8 +430,6 @@ def single_material_input(
                 row_preview["base_metal"] = auto_base_metal
             if "density" in row_preview:
                 row_preview["density"] = density
-            if "n_elements_present" in row_preview and n_elements_present is not None:
-                row_preview["n_elements_present"] = n_elements_present
 
             row_preview.update(composition_dict)
             row_preview[PRESSURE_COL_NAME] = applied_pressure
@@ -498,8 +469,6 @@ def single_material_input(
             final_row["base_metal"] = auto_base_metal
         if "density" in final_row:
             final_row["density"] = density
-        if "n_elements_present" in final_row and n_elements_present is not None:
-            final_row["n_elements_present"] = n_elements_present
 
         final_row.update(composition_dict)
         final_row[PRESSURE_COL_NAME] = applied_pressure
@@ -582,7 +551,6 @@ input_mode = st.session_state.input_mode
 
 if input_mode == "Single Material":
     input_df = single_material_input(
-        numeric_features=NUMERIC_FEATURES,
         categorical_features=CATEGORICAL_FEATURES,
         feature_cols=FEATURE_COLS,
         composition_features=COMPOSITION_FEATURES,
