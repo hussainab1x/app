@@ -273,7 +273,7 @@ st.markdown(
     unsafe_allow_html=True
 )
 
-st.info("")
+
 
 st.markdown(
     """
