@@ -273,7 +273,7 @@ st.markdown(
     unsafe_allow_html=True
 )
 
-st.info("Running in standalone mode. No large reference CSV is required.")
+st.info("")
 
 st.markdown(
     """
