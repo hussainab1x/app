@@ -1,10 +1,8 @@
-import os
-from pathlib import Path
-
 import joblib
 import numpy as np
 import pandas as pd
 import streamlit as st
+from pathlib import Path
 from tensorflow import keras
 
 st.set_page_config(page_title="Materials Property Predictor", layout="wide")
@@ -13,7 +11,6 @@ st.set_page_config(page_title="Materials Property Predictor", layout="wide")
 # CONFIG
 # =========================================================
 BASE_DIR = Path(".")
-DATA_PATH = BASE_DIR / "mp_metals_only_with_base_metal.csv"
 PRESSURE_COL_NAME = "applied_pressure_GPa"
 
 ALL_ELEMENTS = [
@@ -74,16 +71,13 @@ MODEL_SPECS = {
     },
 }
 
+DEFAULT_DENSITY = 7.85
+DEFAULT_N_ELEMENTS = 1
+DEFAULT_PRESSURE = 1.0
+
 # =========================================================
 # HELPERS
 # =========================================================
-@st.cache_data
-def load_reference_data(path: Path):
-    if not path.exists():
-        return None
-    return pd.read_csv(path)
-
-
 @st.cache_resource
 def load_model_and_preprocessor(model_path: str, preprocessor_path: str):
     model_file = BASE_DIR / model_path
@@ -97,15 +91,9 @@ def load_model_and_preprocessor(model_path: str, preprocessor_path: str):
     return model, preprocessor
 
 
-def infer_features(df: pd.DataFrame):
-    numeric_features = ["density"] + COMPOSITION_FEATURES
+def infer_features():
+    numeric_features = ["density"] + COMPOSITION_FEATURES + ["n_elements_present"]
     categorical_features = ["base_metal"]
-
-    if "n_elements_present" in df.columns:
-        numeric_features.append("n_elements_present")
-
-    numeric_features = [c for c in numeric_features if c in df.columns or c.startswith("wtpct_")]
-    categorical_features = [c for c in categorical_features if c in df.columns]
     feature_cols = numeric_features + categorical_features
     return numeric_features, categorical_features, feature_cols
 
@@ -168,9 +156,9 @@ def build_sample_template(feature_cols, categorical_features, default_pressure):
         if col.startswith("wtpct_"):
             template[col] = 0.0
         elif col == "density":
-            template[col] = 0.0
+            template[col] = DEFAULT_DENSITY
         elif col == "n_elements_present":
-            template[col] = 1
+            template[col] = DEFAULT_N_ELEMENTS
         elif col in categorical_features:
             template[col] = ""
         else:
@@ -182,10 +170,8 @@ def build_sample_template(feature_cols, categorical_features, default_pressure):
 
 def infer_base_metal_from_composition(composition_dict):
     nonzero_items = {k: float(v) for k, v in composition_dict.items() if float(v) > 0}
-
     if not nonzero_items:
         return np.nan
-
     highest_col = max(nonzero_items, key=nonzero_items.get)
     return highest_col.replace("wtpct_", "")
 
@@ -282,16 +268,10 @@ def validate_uploaded_csv(df, feature_cols, composition_features, default_pressu
 
     return out, report
 
-
 # =========================================================
-# LOAD DATA AND FEATURES
+# FEATURES ONLY FROM CODE
 # =========================================================
-reference_df = load_reference_data(DATA_PATH)
-if reference_df is None:
-    st.error("File not found: mp_metals_only_with_base_metal.csv. Put it in the same folder as app.py")
-    st.stop()
-
-numeric_features, categorical_features, feature_cols = infer_features(reference_df)
+numeric_features, categorical_features, feature_cols = infer_features()
 composition_features = COMPOSITION_FEATURES
 element_options = ALL_ELEMENTS
 
@@ -382,7 +362,7 @@ with st.sidebar:
     default_pressure = st.number_input(
         "Default applied pressure (GPa)",
         min_value=0.0,
-        value=1.0,
+        value=DEFAULT_PRESSURE,
         step=0.1
     )
 
@@ -404,9 +384,7 @@ with st.sidebar:
 # SINGLE INPUT MODE
 # =========================================================
 def single_material_input(
-    reference_df,
     numeric_features,
-    categorical_features,
     feature_cols,
     composition_features,
     element_options,
@@ -426,16 +404,13 @@ def single_material_input(
             st.markdown("### Basic material information")
             st.caption("Base metal is assigned automatically from the highest element percentage.")
 
-            density_default = float(reference_df["density"].median()) if "density" in reference_df.columns else 0.0
-            density = st.number_input("Density", min_value=0.0, value=density_default, step=0.01)
+            density = st.number_input("Density", min_value=0.0, value=DEFAULT_DENSITY, step=0.01)
 
             if "n_elements_present" in numeric_features:
-                n_default = int(max(round(reference_df["n_elements_present"].median()), 1)) \
-                    if "n_elements_present" in reference_df.columns else 1
                 n_elements_present = st.number_input(
                     "Number of elements present",
                     min_value=1,
-                    value=n_default,
+                    value=DEFAULT_N_ELEMENTS,
                     step=1
                 )
             else:
@@ -494,11 +469,9 @@ def single_material_input(
             auto_base_metal = infer_base_metal_from_composition(composition_dict)
 
             row_preview = {col: 0.0 for col in feature_cols}
-            if "base_metal" in row_preview:
-                row_preview["base_metal"] = auto_base_metal
-            if "density" in row_preview:
-                row_preview["density"] = density
-            if "n_elements_present" in row_preview and n_elements_present is not None:
+            row_preview["base_metal"] = auto_base_metal
+            row_preview["density"] = density
+            if n_elements_present is not None:
                 row_preview["n_elements_present"] = n_elements_present
 
             row_preview.update(composition_dict)
@@ -533,14 +506,9 @@ def single_material_input(
             return None
 
         final_row = {col: 0.0 for col in feature_cols}
-
-        auto_base_metal = infer_base_metal_from_composition(composition_dict)
-
-        if "base_metal" in final_row:
-            final_row["base_metal"] = auto_base_metal
-        if "density" in final_row:
-            final_row["density"] = density
-        if "n_elements_present" in final_row and n_elements_present is not None:
+        final_row["base_metal"] = infer_base_metal_from_composition(composition_dict)
+        final_row["density"] = density
+        if n_elements_present is not None:
             final_row["n_elements_present"] = n_elements_present
 
         final_row.update(composition_dict)
@@ -549,7 +517,6 @@ def single_material_input(
         return pd.DataFrame([final_row])
 
     return None
-
 
 # =========================================================
 # CSV MODE
@@ -614,7 +581,6 @@ def csv_input_mode(default_pressure, feature_cols, composition_features, categor
 
     return validated_df
 
-
 # =========================================================
 # MAIN INPUT FLOW
 # =========================================================
@@ -630,9 +596,7 @@ input_mode = st.session_state.input_mode
 
 if input_mode == "Single Material":
     input_df = single_material_input(
-        reference_df=reference_df,
         numeric_features=numeric_features,
-        categorical_features=categorical_features,
         feature_cols=feature_cols,
         composition_features=composition_features,
         element_options=element_options,
