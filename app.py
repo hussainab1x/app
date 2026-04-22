@@ -1,4 +1,3 @@
-import os
 from pathlib import Path
 
 import joblib
@@ -10,10 +9,35 @@ from tensorflow import keras
 
 st.set_page_config(page_title="Metal Mechanical Property Predictor", layout="wide")
 
-
 BASE_DIR = Path(".")
-DATA_PATH = BASE_DIR / "mp_metals_only_with_base_metal.csv"
 PRESSURE_COL_NAME = "applied_pressure_GPa"
+
+# Put here all composition columns that your preprocessors/models were trained on.
+# Add/remove elements if your actual training columns are different.
+COMPOSITION_FEATURES = [
+    "wtpct_Al",
+    "wtpct_B",
+    "wtpct_C",
+    "wtpct_Co",
+    "wtpct_Cr",
+    "wtpct_Cu",
+    "wtpct_Fe",
+    "wtpct_Mn",
+    "wtpct_Mo",
+    "wtpct_Nb",
+    "wtpct_Ni",
+    "wtpct_P",
+    "wtpct_Si",
+    "wtpct_Ti",
+    "wtpct_V",
+    "wtpct_W",
+    "wtpct_Zr",
+]
+
+NUMERIC_FEATURES = ["density", "n_elements_present"]
+CATEGORICAL_FEATURES = ["base_metal"]
+FEATURE_COLS = NUMERIC_FEATURES + COMPOSITION_FEATURES + CATEGORICAL_FEATURES
+ELEMENT_OPTIONS = [c.replace("wtpct_", "") for c in COMPOSITION_FEATURES]
 
 MODEL_SPECS = {
     "bulk_modulus_GPa": {
@@ -54,13 +78,6 @@ MODEL_SPECS = {
 }
 
 
-@st.cache_data
-def load_reference_data(path: Path):
-    if not path.exists():
-        return None
-    return pd.read_csv(path)
-
-
 @st.cache_resource
 def load_model_and_preprocessor(model_path: str, preprocessor_path: str):
     model_file = BASE_DIR / model_path
@@ -74,24 +91,20 @@ def load_model_and_preprocessor(model_path: str, preprocessor_path: str):
     return model, preprocessor
 
 
-def infer_features(df: pd.DataFrame):
-    numeric_features = ["density"] + [c for c in df.columns if c.startswith("wtpct_")]
-    categorical_features = ["base_metal"]
-
-    if "n_elements_present" in df.columns:
-        numeric_features.append("n_elements_present")
-
-    numeric_features = [c for c in numeric_features if c in df.columns]
-    categorical_features = [c for c in categorical_features if c in df.columns]
-    feature_cols = numeric_features + categorical_features
-    return numeric_features, categorical_features, feature_cols
-
-
 def align_input_df(input_df: pd.DataFrame, feature_cols):
     df = input_df.copy()
     for col in feature_cols:
         if col not in df.columns:
-            df[col] = np.nan
+            if col.startswith("wtpct_"):
+                df[col] = 0.0
+            elif col == "density":
+                df[col] = np.nan
+            elif col == "n_elements_present":
+                df[col] = np.nan
+            elif col == "base_metal":
+                df[col] = np.nan
+            else:
+                df[col] = np.nan
     return df[feature_cols]
 
 
@@ -142,7 +155,7 @@ def build_sample_template(feature_cols, categorical_features, default_pressure):
         if col.startswith("wtpct_"):
             template[col] = 0.0
         elif col == "density":
-            template[col] = 0.0
+            template[col] = 7.8
         elif col == "n_elements_present":
             template[col] = 1
         elif col in categorical_features:
@@ -257,18 +270,7 @@ def validate_uploaded_csv(df, feature_cols, composition_features, default_pressu
     return out, report
 
 
-
-reference_df = load_reference_data(DATA_PATH)
-if reference_df is None:
-    st.error("File not found: mp_metals_only_with_base_metal.csv. Put it in the same folder as app.py")
-    st.stop()
-
-numeric_features, categorical_features, feature_cols = infer_features(reference_df)
-composition_features = sorted([c for c in reference_df.columns if c.startswith("wtpct_")])
-element_options = [c.replace("wtpct_", "") for c in composition_features]
-
 available_models, missing_models = get_available_models()
-
 
 if "input_mode" not in st.session_state:
     st.session_state.input_mode = None
@@ -290,6 +292,8 @@ st.markdown(
     """,
     unsafe_allow_html=True
 )
+
+st.info("Running in standalone mode. No large reference CSV is required.")
 
 st.markdown(
     """
@@ -330,7 +334,6 @@ with col2:
 
 st.markdown("<br>", unsafe_allow_html=True)
 
-
 with st.sidebar:
     st.header("App Settings")
 
@@ -370,7 +373,6 @@ with st.sidebar:
 
 
 def single_material_input(
-    reference_df,
     numeric_features,
     categorical_features,
     feature_cols,
@@ -392,16 +394,13 @@ def single_material_input(
             st.markdown("### Basic material information")
             st.caption("Base metal is assigned automatically from the highest element percentage.")
 
-            density_default = float(reference_df["density"].median()) if "density" in reference_df.columns else 0.0
-            density = st.number_input("Density", min_value=0.0, value=density_default, step=0.01)
+            density = st.number_input("Density", min_value=0.0, value=7.8, step=0.01)
 
             if "n_elements_present" in numeric_features:
-                n_default = int(max(round(reference_df["n_elements_present"].median()), 1)) \
-                    if "n_elements_present" in reference_df.columns else 1
                 n_elements_present = st.number_input(
                     "Number of elements present",
                     min_value=1,
-                    value=n_default,
+                    value=2,
                     step=1
                 )
             else:
@@ -499,7 +498,6 @@ def single_material_input(
             return None
 
         final_row = {col: 0.0 for col in feature_cols}
-
         auto_base_metal = infer_base_metal_from_composition(composition_dict)
 
         if "base_metal" in final_row:
@@ -578,9 +576,8 @@ def csv_input_mode(default_pressure, feature_cols, composition_features, categor
     return validated_df
 
 
-
 if not available_models:
-    st.warning("Put your five .keras and .pkl files in the same folder as this app, then rerun Streamlit.")
+    st.warning("Put your .keras and .pkl files in the same folder as this app, then rerun Streamlit.")
     st.stop()
 
 if not selected_targets:
@@ -591,27 +588,25 @@ input_mode = st.session_state.input_mode
 
 if input_mode == "Single Material":
     input_df = single_material_input(
-        reference_df=reference_df,
-        numeric_features=numeric_features,
-        categorical_features=categorical_features,
-        feature_cols=feature_cols,
-        composition_features=composition_features,
-        element_options=element_options,
+        numeric_features=NUMERIC_FEATURES,
+        categorical_features=CATEGORICAL_FEATURES,
+        feature_cols=FEATURE_COLS,
+        composition_features=COMPOSITION_FEATURES,
+        element_options=ELEMENT_OPTIONS,
         default_pressure=default_pressure
     )
 elif input_mode == "CSV Upload":
     input_df = csv_input_mode(
         default_pressure=default_pressure,
-        feature_cols=feature_cols,
-        composition_features=composition_features,
-        categorical_features=categorical_features
+        feature_cols=FEATURE_COLS,
+        composition_features=COMPOSITION_FEATURES,
+        categorical_features=CATEGORICAL_FEATURES
     )
 else:
     input_df = None
 
-
 if input_df is not None:
-    aligned_df = align_input_df(input_df, feature_cols)
+    aligned_df = align_input_df(input_df, FEATURE_COLS)
     result_df = input_df.copy()
 
     with st.spinner("Running models..."):
