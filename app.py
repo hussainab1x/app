@@ -1,3 +1,4 @@
+import os
 from pathlib import Path
 
 import joblib
@@ -6,31 +7,14 @@ import pandas as pd
 import streamlit as st
 from tensorflow import keras
 
+st.set_page_config(page_title="Materials Property Predictor", layout="wide")
 
-st.set_page_config(page_title="Metal Mechanical Property Predictor", layout="wide")
-
+# =========================================================
+# CONFIG
+# =========================================================
 BASE_DIR = Path(".")
+DATA_PATH = BASE_DIR / "mp_metals_only_with_base_metal.csv"
 PRESSURE_COL_NAME = "applied_pressure_GPa"
-
-COMPOSITION_FEATURES = [
-    "wtpct_H", "wtpct_He", "wtpct_Li", "wtpct_Be", "wtpct_B", "wtpct_C", "wtpct_N", "wtpct_O", "wtpct_F", "wtpct_Ne",
-    "wtpct_Na", "wtpct_Mg", "wtpct_Al", "wtpct_Si", "wtpct_P", "wtpct_S", "wtpct_Cl", "wtpct_Ar", "wtpct_K", "wtpct_Ca",
-    "wtpct_Sc", "wtpct_Ti", "wtpct_V", "wtpct_Cr", "wtpct_Mn", "wtpct_Fe", "wtpct_Co", "wtpct_Ni", "wtpct_Cu", "wtpct_Zn",
-    "wtpct_Ga", "wtpct_Ge", "wtpct_As", "wtpct_Se", "wtpct_Br", "wtpct_Kr", "wtpct_Rb", "wtpct_Sr", "wtpct_Y", "wtpct_Zr",
-    "wtpct_Nb", "wtpct_Mo", "wtpct_Tc", "wtpct_Ru", "wtpct_Rh", "wtpct_Pd", "wtpct_Ag", "wtpct_Cd", "wtpct_In", "wtpct_Sn",
-    "wtpct_Sb", "wtpct_Te", "wtpct_I", "wtpct_Xe", "wtpct_Cs", "wtpct_Ba", "wtpct_La", "wtpct_Ce", "wtpct_Pr", "wtpct_Nd",
-    "wtpct_Pm", "wtpct_Sm", "wtpct_Eu", "wtpct_Gd", "wtpct_Tb", "wtpct_Dy", "wtpct_Ho", "wtpct_Er", "wtpct_Tm", "wtpct_Yb",
-    "wtpct_Lu", "wtpct_Hf", "wtpct_Ta", "wtpct_W", "wtpct_Re", "wtpct_Os", "wtpct_Ir", "wtpct_Pt", "wtpct_Au", "wtpct_Hg",
-    "wtpct_Tl", "wtpct_Pb", "wtpct_Bi", "wtpct_Po", "wtpct_At", "wtpct_Rn", "wtpct_Fr", "wtpct_Ra", "wtpct_Ac", "wtpct_Th",
-    "wtpct_Pa", "wtpct_U", "wtpct_Np", "wtpct_Pu", "wtpct_Am", "wtpct_Cm", "wtpct_Bk", "wtpct_Cf", "wtpct_Es", "wtpct_Fm",
-    "wtpct_Md", "wtpct_No", "wtpct_Lr", "wtpct_Rf", "wtpct_Db", "wtpct_Sg", "wtpct_Bh", "wtpct_Hs", "wtpct_Mt", "wtpct_Ds",
-    "wtpct_Rg", "wtpct_Cn", "wtpct_Nh", "wtpct_Fl", "wtpct_Mc", "wtpct_Lv", "wtpct_Ts", "wtpct_Og"
-]
-
-NUMERIC_FEATURES = ["density"]
-CATEGORICAL_FEATURES = ["base_metal"]
-FEATURE_COLS = NUMERIC_FEATURES + COMPOSITION_FEATURES + CATEGORICAL_FEATURES
-ELEMENT_OPTIONS = [c.replace("wtpct_", "") for c in COMPOSITION_FEATURES]
 
 MODEL_SPECS = {
     "bulk_modulus_GPa": {
@@ -70,6 +54,15 @@ MODEL_SPECS = {
     },
 }
 
+# =========================================================
+# HELPERS
+# =========================================================
+@st.cache_data
+def load_reference_data(path: Path):
+    if not path.exists():
+        return None
+    return pd.read_csv(path)
+
 
 @st.cache_resource
 def load_model_and_preprocessor(model_path: str, preprocessor_path: str):
@@ -84,18 +77,24 @@ def load_model_and_preprocessor(model_path: str, preprocessor_path: str):
     return model, preprocessor
 
 
+def infer_features(df: pd.DataFrame):
+    numeric_features = ["density"] + [c for c in df.columns if c.startswith("wtpct_")]
+    categorical_features = ["base_metal"]
+
+    if "n_elements_present" in df.columns:
+        numeric_features.append("n_elements_present")
+
+    numeric_features = [c for c in numeric_features if c in df.columns]
+    categorical_features = [c for c in categorical_features if c in df.columns]
+    feature_cols = numeric_features + categorical_features
+    return numeric_features, categorical_features, feature_cols
+
+
 def align_input_df(input_df: pd.DataFrame, feature_cols):
     df = input_df.copy()
     for col in feature_cols:
         if col not in df.columns:
-            if col.startswith("wtpct_"):
-                df[col] = 0.0
-            elif col == "density":
-                df[col] = np.nan
-            elif col == "base_metal":
-                df[col] = np.nan
-            else:
-                df[col] = np.nan
+            df[col] = np.nan
     return df[feature_cols]
 
 
@@ -146,7 +145,9 @@ def build_sample_template(feature_cols, categorical_features, default_pressure):
         if col.startswith("wtpct_"):
             template[col] = 0.0
         elif col == "density":
-            template[col] = 7.8
+            template[col] = 0.0
+        elif col == "n_elements_present":
+            template[col] = 1
         elif col in categorical_features:
             template[col] = ""
         else:
@@ -205,6 +206,13 @@ def validate_single_input_row(row_dict, composition_features):
     if len(selected_nonzero) == 0:
         errors.append("Please enter at least one element percentage.")
 
+    if "n_elements_present" in row_dict:
+        try:
+            if int(row_dict["n_elements_present"]) < 1:
+                errors.append("Number of elements present must be at least 1.")
+        except Exception:
+            errors.append("Number of elements present must be valid.")
+
     return total_wt, status_type, status_text, messages, errors
 
 
@@ -220,6 +228,8 @@ def validate_uploaded_csv(df, feature_cols, composition_features, default_pressu
         if col.startswith("wtpct_"):
             out[col] = 0.0
         elif col == "density":
+            out[col] = np.nan
+        elif col == "n_elements_present":
             out[col] = np.nan
         elif col == "base_metal":
             out[col] = np.nan
@@ -250,15 +260,30 @@ def validate_uploaded_csv(df, feature_cols, composition_features, default_pressu
     return out, report
 
 
+# =========================================================
+# LOAD DATA AND FEATURES
+# =========================================================
+reference_df = load_reference_data(DATA_PATH)
+if reference_df is None:
+    st.error("File not found: mp_metals_only_with_base_metal.csv. Put it in the same folder as app.py")
+    st.stop()
+
+numeric_features, categorical_features, feature_cols = infer_features(reference_df)
+composition_features = sorted([c for c in reference_df.columns if c.startswith("wtpct_")])
+element_options = [c.replace("wtpct_", "") for c in composition_features]
+
 available_models, missing_models = get_available_models()
 
+# =========================================================
+# LANDING SECTION
+# =========================================================
 if "input_mode" not in st.session_state:
     st.session_state.input_mode = None
 
 st.markdown(
     """
     <div style="text-align:center; margin-top:40px; margin-bottom:10px;">
-        <h1>Metal Mechanical Properties Predictor</h1>
+        <h1>Materials Property Predictor</h1>
     </div>
     """,
     unsafe_allow_html=True
@@ -272,8 +297,6 @@ st.markdown(
     """,
     unsafe_allow_html=True
 )
-
-
 
 st.markdown(
     """
@@ -314,6 +337,9 @@ with col2:
 
 st.markdown("<br>", unsafe_allow_html=True)
 
+# =========================================================
+# SIDEBAR
+# =========================================================
 with st.sidebar:
     st.header("App Settings")
 
@@ -351,8 +377,12 @@ with st.sidebar:
         for _, spec in missing_models.items():
             st.error(spec["label"])
 
-
+# =========================================================
+# SINGLE INPUT MODE
+# =========================================================
 def single_material_input(
+    reference_df,
+    numeric_features,
     categorical_features,
     feature_cols,
     composition_features,
@@ -372,7 +402,22 @@ def single_material_input(
         with col_a:
             st.markdown("### Basic material information")
             st.caption("Base metal is assigned automatically from the highest element percentage.")
-            density = st.number_input("Density", min_value=0.0, value=7.8, step=0.01)
+
+            density_default = float(reference_df["density"].median()) if "density" in reference_df.columns else 0.0
+            density = st.number_input("Density", min_value=0.0, value=density_default, step=0.01)
+
+            if "n_elements_present" in numeric_features:
+                n_default = int(max(round(reference_df["n_elements_present"].median()), 1)) \
+                    if "n_elements_present" in reference_df.columns else 1
+                n_elements_present = st.number_input(
+                    "Number of elements present",
+                    min_value=1,
+                    value=n_default,
+                    step=1
+                )
+            else:
+                n_elements_present = None
+
             applied_pressure = st.number_input(
                 "Applied pressure (GPa)",
                 min_value=0.0,
@@ -430,6 +475,8 @@ def single_material_input(
                 row_preview["base_metal"] = auto_base_metal
             if "density" in row_preview:
                 row_preview["density"] = density
+            if "n_elements_present" in row_preview and n_elements_present is not None:
+                row_preview["n_elements_present"] = n_elements_present
 
             row_preview.update(composition_dict)
             row_preview[PRESSURE_COL_NAME] = applied_pressure
@@ -463,12 +510,15 @@ def single_material_input(
             return None
 
         final_row = {col: 0.0 for col in feature_cols}
+
         auto_base_metal = infer_base_metal_from_composition(composition_dict)
 
         if "base_metal" in final_row:
             final_row["base_metal"] = auto_base_metal
         if "density" in final_row:
             final_row["density"] = density
+        if "n_elements_present" in final_row and n_elements_present is not None:
+            final_row["n_elements_present"] = n_elements_present
 
         final_row.update(composition_dict)
         final_row[PRESSURE_COL_NAME] = applied_pressure
@@ -478,6 +528,9 @@ def single_material_input(
     return None
 
 
+# =========================================================
+# CSV MODE
+# =========================================================
 def csv_input_mode(default_pressure, feature_cols, composition_features, categorical_features):
     st.subheader("CSV Upload")
 
@@ -539,8 +592,11 @@ def csv_input_mode(default_pressure, feature_cols, composition_features, categor
     return validated_df
 
 
+# =========================================================
+# MAIN INPUT FLOW
+# =========================================================
 if not available_models:
-    st.warning("Put your .keras and .pkl files in the same folder as this app, then rerun Streamlit.")
+    st.warning("Put your five .keras and .pkl files in the same folder as this app, then rerun Streamlit.")
     st.stop()
 
 if not selected_targets:
@@ -551,24 +607,29 @@ input_mode = st.session_state.input_mode
 
 if input_mode == "Single Material":
     input_df = single_material_input(
-        categorical_features=CATEGORICAL_FEATURES,
-        feature_cols=FEATURE_COLS,
-        composition_features=COMPOSITION_FEATURES,
-        element_options=ELEMENT_OPTIONS,
+        reference_df=reference_df,
+        numeric_features=numeric_features,
+        categorical_features=categorical_features,
+        feature_cols=feature_cols,
+        composition_features=composition_features,
+        element_options=element_options,
         default_pressure=default_pressure
     )
 elif input_mode == "CSV Upload":
     input_df = csv_input_mode(
         default_pressure=default_pressure,
-        feature_cols=FEATURE_COLS,
-        composition_features=COMPOSITION_FEATURES,
-        categorical_features=CATEGORICAL_FEATURES
+        feature_cols=feature_cols,
+        composition_features=composition_features,
+        categorical_features=categorical_features
     )
 else:
     input_df = None
 
+# =========================================================
+# PREDICTIONS
+# =========================================================
 if input_df is not None:
-    aligned_df = align_input_df(input_df, FEATURE_COLS)
+    aligned_df = align_input_df(input_df, feature_cols)
     result_df = input_df.copy()
 
     with st.spinner("Running models..."):
