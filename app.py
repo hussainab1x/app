@@ -16,6 +16,26 @@ BASE_DIR = Path(".")
 DATA_PATH = BASE_DIR / "mp_metals_only_with_base_metal.csv"
 PRESSURE_COL_NAME = "applied_pressure_GPa"
 
+ALL_ELEMENTS = [
+    "H", "He",
+    "Li", "Be", "B", "C", "N", "O", "F", "Ne",
+    "Na", "Mg", "Al", "Si", "P", "S", "Cl", "Ar",
+    "K", "Ca", "Sc", "Ti", "V", "Cr", "Mn", "Fe", "Co", "Ni", "Cu", "Zn",
+    "Ga", "Ge", "As", "Se", "Br", "Kr",
+    "Rb", "Sr", "Y", "Zr", "Nb", "Mo", "Tc", "Ru", "Rh", "Pd", "Ag", "Cd",
+    "In", "Sn", "Sb", "Te", "I", "Xe",
+    "Cs", "Ba", "La", "Ce", "Pr", "Nd", "Pm", "Sm", "Eu", "Gd", "Tb", "Dy",
+    "Ho", "Er", "Tm", "Yb", "Lu",
+    "Hf", "Ta", "W", "Re", "Os", "Ir", "Pt", "Au", "Hg",
+    "Tl", "Pb", "Bi", "Po", "At", "Rn",
+    "Fr", "Ra", "Ac", "Th", "Pa", "U", "Np", "Pu", "Am", "Cm", "Bk", "Cf",
+    "Es", "Fm", "Md", "No", "Lr",
+    "Rf", "Db", "Sg", "Bh", "Hs", "Mt", "Ds", "Rg", "Cn",
+    "Nh", "Fl", "Mc", "Lv", "Ts", "Og"
+]
+
+COMPOSITION_FEATURES = [f"wtpct_{el}" for el in ALL_ELEMENTS]
+
 MODEL_SPECS = {
     "bulk_modulus_GPa": {
         "label": "Bulk Modulus (GPa)",
@@ -78,13 +98,13 @@ def load_model_and_preprocessor(model_path: str, preprocessor_path: str):
 
 
 def infer_features(df: pd.DataFrame):
-    numeric_features = ["density"] + [c for c in df.columns if c.startswith("wtpct_")]
+    numeric_features = ["density"] + COMPOSITION_FEATURES
     categorical_features = ["base_metal"]
 
     if "n_elements_present" in df.columns:
         numeric_features.append("n_elements_present")
 
-    numeric_features = [c for c in numeric_features if c in df.columns]
+    numeric_features = [c for c in numeric_features if c in df.columns or c.startswith("wtpct_")]
     categorical_features = [c for c in categorical_features if c in df.columns]
     feature_cols = numeric_features + categorical_features
     return numeric_features, categorical_features, feature_cols
@@ -94,7 +114,10 @@ def align_input_df(input_df: pd.DataFrame, feature_cols):
     df = input_df.copy()
     for col in feature_cols:
         if col not in df.columns:
-            df[col] = np.nan
+            if col.startswith("wtpct_"):
+                df[col] = 0.0
+            else:
+                df[col] = np.nan
     return df[feature_cols]
 
 
@@ -269,8 +292,8 @@ if reference_df is None:
     st.stop()
 
 numeric_features, categorical_features, feature_cols = infer_features(reference_df)
-composition_features = sorted([c for c in reference_df.columns if c.startswith("wtpct_")])
-element_options = [c.replace("wtpct_", "") for c in composition_features]
+composition_features = COMPOSITION_FEATURES
+element_options = ALL_ELEMENTS
 
 available_models, missing_models = get_available_models()
 
