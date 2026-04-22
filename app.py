@@ -12,80 +12,20 @@ st.set_page_config(page_title="Metal Mechanical Property Predictor", layout="wid
 BASE_DIR = Path(".")
 PRESSURE_COL_NAME = "applied_pressure_GPa"
 
-# Put here all composition columns that your preprocessors/models were trained on.
-# Add/remove elements if your actual training columns are different.
+
 COMPOSITION_FEATURES = [
-    "wtpct_Ag",
-    "wtpct_Al",
-    "wtpct_As",
-    "wtpct_Au",
-    "wtpct_B",
-    "wtpct_Ba",
-    "wtpct_Be",
-    "wtpct_Bi",
-    "wtpct_C",
-    "wtpct_Ca",
-    "wtpct_Cd",
-    "wtpct_Ce",
-    "wtpct_Co",
-    "wtpct_Cr",
-    "wtpct_Cs",
-    "wtpct_Cu",
-    "wtpct_Dy",
-    "wtpct_Er",
-    "wtpct_Eu",
-    "wtpct_Fe",
-    "wtpct_Ga",
-    "wtpct_Gd",
-    "wtpct_Ge",
-    "wtpct_Hf",
-    "wtpct_Hg",
-    "wtpct_Ho",
-    "wtpct_In",
-    "wtpct_Ir",
-    "wtpct_K",
-    "wtpct_La",
-    "wtpct_Li",
-    "wtpct_Lu",
-    "wtpct_Mg",
-    "wtpct_Mn",
-    "wtpct_Mo",
-    "wtpct_Na",
-    "wtpct_Nb",
-    "wtpct_Nd",
-    "wtpct_Ni",
-    "wtpct_O",
-    "wtpct_Os",
-    "wtpct_P",
-    "wtpct_Pb",
-    "wtpct_Pd",
-    "wtpct_Pr",
-    "wtpct_Pt",
-    "wtpct_Re",
-    "wtpct_Rh",
-    "wtpct_Ru",
-    "wtpct_S",
-    "wtpct_Sb",
-    "wtpct_Sc",
-    "wtpct_Se",
-    "wtpct_Si",
-    "wtpct_Sm",
-    "wtpct_Sn",
-    "wtpct_Sr",
-    "wtpct_Ta",
-    "wtpct_Tb",
-    "wtpct_Te",
-    "wtpct_Th",
-    "wtpct_Ti",
-    "wtpct_Tl",
-    "wtpct_Tm",
-    "wtpct_U",
-    "wtpct_V",
-    "wtpct_W",
-    "wtpct_Y",
-    "wtpct_Yb",
-    "wtpct_Zn",
-    "wtpct_Zr",
+    "wtpct_H", "wtpct_He", "wtpct_Li", "wtpct_Be", "wtpct_B", "wtpct_C", "wtpct_N", "wtpct_O", "wtpct_F", "wtpct_Ne",
+    "wtpct_Na", "wtpct_Mg", "wtpct_Al", "wtpct_Si", "wtpct_P", "wtpct_S", "wtpct_Cl", "wtpct_Ar", "wtpct_K", "wtpct_Ca",
+    "wtpct_Sc", "wtpct_Ti", "wtpct_V", "wtpct_Cr", "wtpct_Mn", "wtpct_Fe", "wtpct_Co", "wtpct_Ni", "wtpct_Cu", "wtpct_Zn",
+    "wtpct_Ga", "wtpct_Ge", "wtpct_As", "wtpct_Se", "wtpct_Br", "wtpct_Kr", "wtpct_Rb", "wtpct_Sr", "wtpct_Y", "wtpct_Zr",
+    "wtpct_Nb", "wtpct_Mo", "wtpct_Tc", "wtpct_Ru", "wtpct_Rh", "wtpct_Pd", "wtpct_Ag", "wtpct_Cd", "wtpct_In", "wtpct_Sn",
+    "wtpct_Sb", "wtpct_Te", "wtpct_I", "wtpct_Xe", "wtpct_Cs", "wtpct_Ba", "wtpct_La", "wtpct_Ce", "wtpct_Pr", "wtpct_Nd",
+    "wtpct_Pm", "wtpct_Sm", "wtpct_Eu", "wtpct_Gd", "wtpct_Tb", "wtpct_Dy", "wtpct_Ho", "wtpct_Er", "wtpct_Tm", "wtpct_Yb",
+    "wtpct_Lu", "wtpct_Hf", "wtpct_Ta", "wtpct_W", "wtpct_Re", "wtpct_Os", "wtpct_Ir", "wtpct_Pt", "wtpct_Au", "wtpct_Hg",
+    "wtpct_Tl", "wtpct_Pb", "wtpct_Bi", "wtpct_Po", "wtpct_At", "wtpct_Rn", "wtpct_Fr", "wtpct_Ra", "wtpct_Ac", "wtpct_Th",
+    "wtpct_Pa", "wtpct_U", "wtpct_Np", "wtpct_Pu", "wtpct_Am", "wtpct_Cm", "wtpct_Bk", "wtpct_Cf", "wtpct_Es", "wtpct_Fm",
+    "wtpct_Md", "wtpct_No", "wtpct_Lr", "wtpct_Rf", "wtpct_Db", "wtpct_Sg", "wtpct_Bh", "wtpct_Hs", "wtpct_Mt", "wtpct_Ds",
+    "wtpct_Rg", "wtpct_Cn", "wtpct_Nh", "wtpct_Fl", "wtpct_Mc", "wtpct_Lv", "wtpct_Ts", "wtpct_Og"
 ]
 
 NUMERIC_FEATURES = ["density", "n_elements_present"]
@@ -347,7 +287,7 @@ st.markdown(
     unsafe_allow_html=True
 )
 
-st.info("Running in standalone mode. No large reference CSV is required.")
+
 
 st.markdown(
     """
